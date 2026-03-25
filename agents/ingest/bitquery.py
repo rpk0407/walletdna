@@ -1,10 +1,6 @@
-"""Bitquery GraphQL wrapper for multi-chain transaction queries.
+"""Bitquery GraphQL wrapper for multi-chain supplementary data."""
 
-Used as a supplementary source for cross-chain data when Helius/Alchemy
-don't cover the required chain or query type.
-"""
-
-from __future__ import annotations
+from typing import Any
 
 import httpx
 import structlog
@@ -15,55 +11,59 @@ logger = structlog.get_logger()
 
 _ENDPOINT = "https://graphql.bitquery.io"
 
-_DEX_TRADES_QUERY = """
-query DexTrades($address: String!, $limit: Int!) {
-  ethereum {
-    dexTrades(
-      txSender: {is: $address}
-      options: {limit: $limit, desc: "block.timestamp.time"}
-    ) {
-      transaction { hash }
-      block { timestamp { time } height }
-      buyAmount
-      buyCurrency { symbol address }
-      sellAmount
-      sellCurrency { symbol address }
-      tradeAmount(in: USD)
-      exchange { name }
-      smartContract { address { address } }
-    }
-  }
-}
-"""
-
 
 class BitqueryIngestor:
-    """Fetches cross-chain DEX trade data via Bitquery GraphQL."""
+    """Fetches cross-chain DEX trades and transfers via Bitquery GraphQL.
+
+    Used as a secondary/fallback data source when Helius or Alchemy
+    don't cover the required chain or transaction type.
+    """
 
     def __init__(self) -> None:
         self._api_key = settings.bitquery_api_key
 
-    async def fetch_dex_trades(self, wallet_address: str, limit: int = 1000) -> list[dict]:
-        """Fetch DEX trade history for a wallet via Bitquery.
+    async def fetch_dex_trades(self, address: str, chain: str = "ethereum") -> list[dict[str, Any]]:
+        """Fetch DEX trades for a wallet across a given chain.
 
         Args:
-            wallet_address: The wallet address to query.
-            limit: Maximum number of trades to return.
+            address: Wallet address.
+            chain: Chain name (ethereum, bsc, polygon, etc.).
 
         Returns:
-            List of DEX trade records from Bitquery.
+            List of DEX trade dicts.
         """
-        headers = {"X-API-KEY": self._api_key, "Content-Type": "application/json"}
-        payload = {
-            "query": _DEX_TRADES_QUERY,
-            "variables": {"address": wallet_address, "limit": limit},
+        query = """
+        query ($address: String!, $chain: EthereumNetwork!) {
+          ethereum(network: $chain) {
+            dexTrades(
+              txSender: {is: $address}
+              options: {limit: 1000, desc: "block.timestamp.time"}
+            ) {
+              transaction { hash }
+              block { timestamp { time } height }
+              exchange { name }
+              baseCurrency { symbol address }
+              quoteCurrency { symbol address }
+              buyAmount
+              sellAmount
+              tradeAmountInUsd: tradeAmount(in: USD)
+            }
+          }
         }
+        """
+        variables = {"address": address, "chain": chain}
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(_ENDPOINT, json=payload, headers=headers)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                _ENDPOINT,
+                json={"query": query, "variables": variables},
+                headers={"X-API-KEY": self._api_key},
+            )
             resp.raise_for_status()
             data = resp.json()
 
-        trades = data.get("data", {}).get("ethereum", {}).get("dexTrades", [])
-        logger.info("bitquery.done", wallet=wallet_address, count=len(trades))
+        trades: list[dict[str, Any]] = (
+            data.get("data", {}).get("ethereum", {}).get("dexTrades", [])
+        )
+        logger.info("bitquery.trades", address=address, count=len(trades))
         return trades

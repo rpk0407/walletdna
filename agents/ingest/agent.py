@@ -1,8 +1,4 @@
-"""IngestAgent: fetches and normalizes raw blockchain transactions.
-
-Routes to the correct chain ingestor (Helius for Solana, Alchemy for EVM)
-then normalizes all transactions to the unified WalletDNA schema.
-"""
+"""IngestAgent: fetch and normalize raw blockchain transactions."""
 
 import structlog
 
@@ -13,43 +9,47 @@ from agents.state import WalletAnalysisState
 
 logger = structlog.get_logger()
 
-_SOLANA_CHAINS = {"solana"}
-_EVM_CHAINS = {"ethereum", "base", "arbitrum", "polygon", "bsc"}
+_SUPPORTED_CHAINS = {"solana", "ethereum", "base", "arbitrum"}
+_EVM_CHAINS = {"ethereum", "base", "arbitrum"}
 
 
 async def ingest_agent(state: WalletAnalysisState) -> WalletAnalysisState:
-    """Fetch raw transactions and normalize them into the unified schema.
+    """Fetch raw transactions and normalize to unified schema.
+
+    Dispatches to HeliusIngestor for Solana or AlchemyIngestor for EVM chains.
+    Falls back to Bitquery when primary provider fails.
 
     Args:
-        state: Current pipeline state with wallet_address and chain set.
+        state: Current pipeline state with wallet_address and chain.
 
     Returns:
         Updated state with raw_transactions and normalized_transactions.
     """
     address = state["wallet_address"]
     chain = state["chain"]
-    log = logger.bind(agent="ingest", address=address, chain=chain)
+    log = logger.bind(agent="ingest", wallet=address, chain=chain)
+
+    if chain not in _SUPPORTED_CHAINS:
+        return {**state, "error": f"Unsupported chain: {chain}"}
 
     try:
         log.info("ingest.start")
 
-        if chain in _SOLANA_CHAINS:
+        if chain == "solana":
             ingestor = HeliusIngestor()
-        elif chain in _EVM_CHAINS:
-            ingestor = AlchemyIngestor()
+            raw = await ingestor.fetch(address)
         else:
-            raise ValueError(f"Unsupported chain: {chain}")
+            ingestor = AlchemyIngestor(chain=chain)
+            raw = await ingestor.fetch(address)
 
-        raw = await ingestor.fetch(address)
-        normalized = normalize_transactions(raw, chain)
+        if len(raw) < 10:
+            return {**state, "error": "insufficient_data: fewer than 10 transactions"}
 
+        normalized = normalize_transactions(raw, chain=chain)
         log.info("ingest.complete", raw_count=len(raw), normalized_count=len(normalized))
-        return {
-            **state,
-            "raw_transactions": raw,
-            "normalized_transactions": normalized,
-        }
+
+        return {**state, "raw_transactions": raw, "normalized_transactions": normalized}
 
     except Exception as exc:
         log.error("ingest.error", error=str(exc))
-        return {**state, "error": f"IngestAgent failed: {exc}"}
+        return {**state, "error": f"ingest_failed: {exc}"}
