@@ -14,10 +14,10 @@ class Dimensions(BaseModel):
     """Six behavioral dimension scores (0–100)."""
     speed: int = Field(ge=0, le=100)
     conviction: int = Field(ge=0, le=100)
-    diversity: int = Field(ge=0, le=100)
-    frequency: int = Field(ge=0, le=100)
-    influence: int = Field(ge=0, le=100)
-    extraction: int = Field(ge=0, le=100)
+    risk_appetite: int = Field(ge=0, le=100)
+    sophistication: int = Field(ge=0, le=100)
+    originality: int = Field(ge=0, le=100)
+    consistency: int = Field(ge=0, le=100)
 
 
 # ---------------------------------------------------------------------------
@@ -130,5 +130,5 @@ class APIKeyCreateRequest(BaseModel):
 class APIKeyResponse(BaseModel):
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     key_id: str
-    api_key: str  # only returned on creation
+    api_key: str  # raw key — returned only on creation
     label: str | None = None
