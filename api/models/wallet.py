@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -16,6 +16,7 @@ class WalletProfile(Base):
     """Persisted wallet personality profile."""
 
     __tablename__ = "wallet_profiles"
+    __table_args__ = (UniqueConstraint("address", "chain", name="uq_wallet_profiles_address_chain"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     address: Mapped[str] = mapped_column(String(100), nullable=False, index=True)

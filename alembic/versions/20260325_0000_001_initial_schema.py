@@ -33,6 +33,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_wallet_profiles_address", "wallet_profiles", ["address"])
     op.create_index("ix_wallet_profiles_chain_archetype", "wallet_profiles", ["chain", "primary_archetype"])
+    op.create_unique_constraint("uq_wallet_profiles_address_chain", "wallet_profiles", ["address", "chain"])
 
     op.create_table(
         "analysis_results",

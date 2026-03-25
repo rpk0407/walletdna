@@ -1,4 +1,8 @@
-"""Alchemy SDK wrapper for EVM chain transaction ingestion."""
+"""Alchemy SDK wrapper for EVM chain transaction ingestion.
+
+Research upgrade: Fetches both outgoing (fromAddress) and incoming
+(toAddress) transfers and deduplicates by hash.
+"""
 
 import asyncio
 from typing import Any
@@ -27,9 +31,10 @@ class AlchemyIngestor:
         self._base_url = f"https://{network}.g.alchemy.com/v2/{self._api_key}"
 
     async def fetch(self, address: str) -> list[dict[str, Any]]:
-        """Fetch all asset transfers for an EVM wallet.
+        """Fetch all asset transfers for an EVM wallet (both directions).
 
-        Uses alchemy_getAssetTransfers with pageKey cursor pagination.
+        Runs outgoing and incoming fetches in parallel, then deduplicates
+        by transaction hash.
 
         Args:
             address: EVM wallet address (checksummed or lowercase).
@@ -37,12 +42,39 @@ class AlchemyIngestor:
         Returns:
             List of raw transfer dicts from Alchemy.
         """
+        outgoing, incoming = await asyncio.gather(
+            self._fetch_direction(address, direction="from"),
+            self._fetch_direction(address, direction="to"),
+        )
+
+        # Deduplicate by uniqueId (hash + log index)
+        seen: set[str] = set()
+        merged: list[dict[str, Any]] = []
+        for transfer in outgoing + incoming:
+            uid = transfer.get("uniqueId", transfer.get("hash", ""))
+            if uid not in seen:
+                seen.add(uid)
+                merged.append(transfer)
+
+        logger.info(
+            "alchemy.fetch_complete",
+            wallet=address,
+            outgoing=len(outgoing),
+            incoming=len(incoming),
+            merged=len(merged),
+        )
+        return merged
+
+    async def _fetch_direction(
+        self, address: str, direction: str = "from"
+    ) -> list[dict[str, Any]]:
+        """Fetch transfers in one direction with pagination."""
         all_transfers: list[dict[str, Any]] = []
         page_key: str | None = None
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             while True:
-                payload = self._build_payload(address, page_key)
+                payload = self._build_payload(address, page_key, direction)
                 data = await self._post_with_retry(client, payload)
                 result = data.get("result", {})
                 transfers = result.get("transfers", [])
@@ -54,7 +86,9 @@ class AlchemyIngestor:
 
         return all_transfers
 
-    def _build_payload(self, address: str, page_key: str | None) -> dict[str, Any]:
+    def _build_payload(
+        self, address: str, page_key: str | None, direction: str = "from"
+    ) -> dict[str, Any]:
         """Build the JSON-RPC request body for getAssetTransfers."""
         params: dict[str, Any] = {
             "fromBlock": "0x0",
@@ -68,24 +102,47 @@ class AlchemyIngestor:
         if page_key:
             params["pageKey"] = page_key
 
-        # Fetch both incoming and outgoing by running separate calls merged upstream
-        params["fromAddress"] = address
+        if direction == "from":
+            params["fromAddress"] = address
+        else:
+            params["toAddress"] = address
 
-        return {"id": 1, "jsonrpc": "2.0", "method": "alchemy_getAssetTransfers", "params": [params]}
+        return {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": "alchemy_getAssetTransfers",
+            "params": [params],
+        }
 
-    async def _post_with_retry(self, client: httpx.AsyncClient, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _post_with_retry(
+        self, client: httpx.AsyncClient, payload: dict[str, Any]
+    ) -> dict[str, Any]:
         """POST with exponential backoff on rate limits."""
         delay = 1.0
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 resp = await client.post(self._base_url, json=payload)
+                if resp.status_code == 429:
+                    retry_after = float(resp.headers.get("retry-after", delay))
+                    logger.warning(
+                        "alchemy.rate_limit",
+                        attempt=attempt,
+                        delay=retry_after,
+                    )
+                    await asyncio.sleep(retry_after)
+                    delay *= 2
+                    continue
                 resp.raise_for_status()
                 return resp.json()  # type: ignore[no-any-return]
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == 429:
-                    logger.warning("alchemy.rate_limit", attempt=attempt, delay=delay)
-                    await asyncio.sleep(delay)
-                    delay *= 2
-                else:
-                    raise
+            except httpx.HTTPStatusError:
+                raise
+            except (httpx.ConnectError, httpx.ReadTimeout) as exc:
+                logger.warning(
+                    "alchemy.transient_error",
+                    attempt=attempt,
+                    error=str(exc),
+                    delay=delay,
+                )
+                await asyncio.sleep(delay)
+                delay *= 2
         return {}

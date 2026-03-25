@@ -7,6 +7,7 @@ from typing import Annotated
 import numpy as np
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from agents.orchestrator import analyze_wallet
 from api.dependencies import DBSession
@@ -91,36 +92,35 @@ async def get_wallet_profile(
     # 2. Run pipeline
     profile, raw_result = await _run_pipeline(address, chain)
 
-    # 3. Upsert into PostgreSQL
-    stmt = select(WalletProfile).where(
-        WalletProfile.address == address,
-        WalletProfile.chain == chain,
-    ).limit(1)
-    existing = await db.scalar(stmt)
-
+    # 3. Upsert into PostgreSQL using on_conflict_do_update
     dims_dict = profile.dimensions.model_dump()
-    if existing:
-        existing.primary_archetype = profile.primary_archetype
-        existing.secondary_archetype = profile.secondary_archetype
-        existing.confidence = profile.confidence
-        existing.dimensions = dims_dict
-        existing.summary = profile.summary
-        existing.features = raw_result.get("features", {})
-        existing.sybil_flagged = profile.sybil_flagged
-        existing.copytrade_flagged = profile.copytrade_flagged
-    else:
-        db.add(WalletProfile(
-            address=address,
-            chain=chain,
-            primary_archetype=profile.primary_archetype,
-            secondary_archetype=profile.secondary_archetype,
-            confidence=profile.confidence,
-            dimensions=dims_dict,
-            summary=profile.summary,
-            features=raw_result.get("features", {}),
-            sybil_flagged=profile.sybil_flagged,
-            copytrade_flagged=profile.copytrade_flagged,
-        ))
+    upsert_values = {
+        "address": address,
+        "chain": chain,
+        "primary_archetype": profile.primary_archetype,
+        "secondary_archetype": profile.secondary_archetype,
+        "confidence": profile.confidence,
+        "dimensions": dims_dict,
+        "summary": profile.summary,
+        "features": raw_result.get("features", {}),
+        "sybil_flagged": profile.sybil_flagged,
+        "copytrade_flagged": profile.copytrade_flagged,
+    }
+    upsert_stmt = pg_insert(WalletProfile).values(**upsert_values)
+    upsert_stmt = upsert_stmt.on_conflict_do_update(
+        index_elements=["address", "chain"],
+        set_={
+            "primary_archetype": upsert_stmt.excluded.primary_archetype,
+            "secondary_archetype": upsert_stmt.excluded.secondary_archetype,
+            "confidence": upsert_stmt.excluded.confidence,
+            "dimensions": upsert_stmt.excluded.dimensions,
+            "summary": upsert_stmt.excluded.summary,
+            "features": upsert_stmt.excluded.features,
+            "sybil_flagged": upsert_stmt.excluded.sybil_flagged,
+            "copytrade_flagged": upsert_stmt.excluded.copytrade_flagged,
+        },
+    )
+    await db.execute(upsert_stmt)
 
     # 4. Store timeline snapshot
     db.add(AnalysisResult(
