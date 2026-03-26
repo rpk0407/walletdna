@@ -5,10 +5,16 @@
 import type { ActivityResponse, Chain, Timeline, WalletProfile, SimilarWalletsResponse } from './types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_KEY = process.env.WALLETDNA_API_KEY ?? ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(API_KEY ? { 'X-Api-Key': API_KEY } : {}),
+    ...((init?.headers as Record<string, string>) ?? {}),
+  }
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers,
     ...init,
   })
 

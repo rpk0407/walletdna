@@ -82,14 +82,37 @@ async def get_wallet_profile(
     """Return the full personality profile for a wallet address.
 
     Checks Redis cache first. On miss (or refresh=true), runs the full
-    LangGraph pipeline: IngestAgent → FeatureAgent → ClassifyAgent → ScoreAgent.
+    LangGraph pipeline: IngestAgent -> FeatureAgent -> ClassifyAgent -> ScoreAgent.
     Stores result in PostgreSQL and caches in Redis.
     """
-    # 1. Cache check
+    # 1. Cache check (Redis -> PostgreSQL -> pipeline)
     if not refresh:
         cached = await get_profile_cache(address, chain)
         if cached:
             return WalletProfileResponse(**cached)
+
+        # 1b. Fallback to PostgreSQL if not in Redis
+        db_stmt = select(WalletProfile).where(
+            WalletProfile.address == address,
+            WalletProfile.chain == chain,
+        )
+        existing = await db.scalar(db_stmt)
+        if existing:
+            profile_resp = WalletProfileResponse(
+                address=existing.address,
+                chain=existing.chain,
+                primary_archetype=existing.primary_archetype,
+                secondary_archetype=existing.secondary_archetype,
+                confidence=existing.confidence,
+                dimensions=Dimensions(**existing.dimensions),
+                summary=existing.summary,
+                sybil_flagged=existing.sybil_flagged,
+                copytrade_flagged=existing.copytrade_flagged,
+                analyzed_at=existing.analyzed_at,
+            )
+            # Re-populate Redis cache
+            await set_profile_cache(address, chain, profile_resp.model_dump(mode="json"))
+            return profile_resp
 
     # 2. Run pipeline
     profile, raw_result = await _run_pipeline(address, chain)
@@ -174,7 +197,7 @@ async def get_wallet_activity(
     db: DBSession,
     chain: Annotated[str, Query()] = "solana",
 ) -> ActivityResponse:
-    """Return 7×24 transaction activity heatmap (weekday × UTC hour).
+    """Return 7x24 transaction activity heatmap (weekday x UTC hour).
 
     Reads the precomputed activity_grid stored inside WalletProfile.features
     JSONB at the _activity_grid key. Returns normalized intensity per cell
