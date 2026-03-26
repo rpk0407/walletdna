@@ -4,7 +4,7 @@ import structlog
 
 from agents.feature.graph import compute_graph_features
 from agents.feature.protocol import compute_protocol_features
-from agents.feature.temporal import compute_temporal_features
+from agents.feature.temporal import compute_activity_grid, compute_temporal_features
 from agents.feature.transaction import compute_transaction_features
 from agents.state import WalletAnalysisState
 
@@ -31,6 +31,7 @@ async def feature_agent(state: WalletAnalysisState) -> WalletAnalysisState:
         temporal_features = compute_temporal_features(txns)
         protocol_features = compute_protocol_features(txns)
         graph_features = await compute_graph_features(txns, address)
+        activity_grid = compute_activity_grid(txns)
 
         # Merge all scalar features (excluding graph which stays separate)
         all_features: dict[str, float] = {}
@@ -39,7 +40,12 @@ async def feature_agent(state: WalletAnalysisState) -> WalletAnalysisState:
         all_features.update(protocol_features)
 
         log.info("feature.complete", feature_count=len(all_features))
-        return {**state, "features": all_features, "graph_features": graph_features}
+        return {
+            **state,
+            "features": all_features,
+            "graph_features": graph_features,
+            "activity_grid": activity_grid,
+        }
 
     except Exception as exc:
         log.error("feature.error", error=str(exc))

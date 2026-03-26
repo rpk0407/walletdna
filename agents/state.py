@@ -17,6 +17,7 @@ class WalletAnalysisState(TypedDict):
     # After FeatureAgent
     features: dict[str, float]        # 50+ scalar features
     graph_features: dict[str, float]  # Wallet relationship graph features
+    activity_grid: list[list[int]]    # 7×24 weekday×hour transaction counts
 
     # After ClassifyAgent
     cluster_id: int

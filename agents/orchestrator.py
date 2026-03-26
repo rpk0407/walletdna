@@ -121,6 +121,7 @@ async def analyze_wallet(
         "normalized_transactions": [],
         "features": {},
         "graph_features": {},
+        "activity_grid": [],
         "cluster_id": -1,
         "archetype_scores": {},
         "sybil_data": {},

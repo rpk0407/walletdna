@@ -119,6 +119,27 @@ class PlatformStatsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Activity heatmap
+# ---------------------------------------------------------------------------
+
+class ActivityCell(BaseModel):
+    day: int   # 0=Monday … 6=Sunday
+    hour: int  # 0–23 UTC
+    count: int
+    intensity: float  # normalized 0.0–1.0 for display
+
+
+class ActivityResponse(BaseModel):
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    address: str
+    chain: str
+    cells: list[ActivityCell]
+    peak_hour: int       # hour-of-day with most activity
+    peak_day: int        # weekday with most activity
+    total_txns: int
+
+
+# ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
 

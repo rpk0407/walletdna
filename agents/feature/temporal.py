@@ -129,6 +129,29 @@ def _estimate_regime_shifts(timestamps: list[datetime]) -> int:
     return sum(1 for g in gaps if g > avg_gap * 3)
 
 
+def compute_activity_grid(txns: list[dict]) -> list[list[int]]:
+    """Compute a 7×24 transaction activity grid (weekday × hour).
+
+    Row index 0=Monday … 6=Sunday (Python weekday() convention).
+    Column index = UTC hour 0–23.
+    Values are raw transaction counts per cell.
+
+    Args:
+        txns: Normalized transaction dicts.
+
+    Returns:
+        7×24 nested list of ints.
+    """
+    grid: list[list[int]] = [[0] * 24 for _ in range(7)]
+    for tx in txns:
+        try:
+            ts = datetime.fromisoformat(tx["timestamp"])
+            grid[ts.weekday()][ts.hour] += 1
+        except (KeyError, ValueError):
+            continue
+    return grid
+
+
 def _zero_features() -> dict[str, float]:
     return {
         "activity_hours_entropy": 0.0, "weekend_ratio": 0.0, "burst_score": 0.0,

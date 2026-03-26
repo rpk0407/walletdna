@@ -2,7 +2,7 @@
  * API client — typed fetch wrapper for the WalletDNA FastAPI backend.
  */
 
-import type { Chain, Timeline, WalletProfile, SimilarWalletsResponse } from './types'
+import type { ActivityResponse, Chain, Timeline, WalletProfile, SimilarWalletsResponse } from './types'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -33,6 +33,10 @@ export const api = {
 
   getSimilar(address: string, limit = 10): Promise<SimilarWalletsResponse> {
     return request<SimilarWalletsResponse>(`/v1/wallet/${address}/similar?limit=${limit}`)
+  },
+
+  getActivity(address: string, chain: Chain = 'solana'): Promise<ActivityResponse> {
+    return request<ActivityResponse>(`/v1/wallet/${address}/activity?chain=${chain}`)
   },
 
   compareWallets(addressA: string, addressB: string, chain: Chain = 'solana') {

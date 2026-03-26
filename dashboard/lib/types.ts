@@ -68,6 +68,23 @@ export interface ArchetypeInfo {
   wallet_count: number
 }
 
+export interface ActivityCell {
+  day: number       // 0=Monday … 6=Sunday
+  hour: number      // 0–23 UTC
+  count: number
+  intensity: number // 0.0–1.0 normalized
+}
+
+export interface ActivityResponse {
+  request_id: string
+  address: string
+  chain: Chain
+  cells: ActivityCell[]
+  peak_hour: number
+  peak_day: number
+  total_txns: number
+}
+
 export interface ApiError {
   error: {
     code: string

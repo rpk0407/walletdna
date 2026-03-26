@@ -12,6 +12,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from agents.orchestrator import analyze_wallet
 from api.dependencies import DBSession
 from api.models.schemas import (
+    ActivityCell,
+    ActivityResponse,
     CompareRequest,
     CompareResponse,
     Dimensions,
@@ -102,7 +104,11 @@ async def get_wallet_profile(
         "confidence": profile.confidence,
         "dimensions": dims_dict,
         "summary": profile.summary,
-        "features": raw_result.get("features", {}),
+        # Merge activity_grid into features JSONB so one column serves both
+        "features": {
+            **raw_result.get("features", {}),
+            "_activity_grid": raw_result.get("activity_grid", []),
+        },
         "sybil_flagged": profile.sybil_flagged,
         "copytrade_flagged": profile.copytrade_flagged,
     }
@@ -160,6 +166,69 @@ async def get_wallet_timeline(
         for r in rows
     ]
     return TimelineResponse(address=address, timeline=entries)
+
+
+@router.get("/{address}/activity", response_model=ActivityResponse)
+async def get_wallet_activity(
+    address: Annotated[str, Path()],
+    db: DBSession,
+    chain: Annotated[str, Query()] = "solana",
+) -> ActivityResponse:
+    """Return 7×24 transaction activity heatmap (weekday × UTC hour).
+
+    Reads the precomputed activity_grid stored inside WalletProfile.features
+    JSONB at the _activity_grid key. Returns normalized intensity per cell
+    for direct frontend rendering.
+    """
+    stmt = select(WalletProfile).where(
+        WalletProfile.address == address,
+        WalletProfile.chain == chain,
+    ).limit(1)
+    profile = await db.scalar(stmt)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": {"code": "not_found", "message": "Wallet not analyzed yet. Call /profile first."}},
+        )
+
+    grid: list[list[int]] = profile.features.get("_activity_grid", [])
+
+    # Flatten grid into ActivityCell list + compute stats
+    cells: list[ActivityCell] = []
+    peak_count = 1  # avoid div-by-zero
+
+    if grid and len(grid) == 7:
+        # Find global max for normalization
+        peak_count = max(
+            (grid[day][hour] for day in range(7) for hour in range(24)),
+            default=1,
+        ) or 1
+
+        for day in range(7):
+            for hour in range(24):
+                count = grid[day][hour] if len(grid[day]) > hour else 0
+                cells.append(ActivityCell(
+                    day=day,
+                    hour=hour,
+                    count=count,
+                    intensity=round(count / peak_count, 4),
+                ))
+
+    # Peak day / peak hour from marginals
+    day_totals = [sum(grid[d]) for d in range(7)] if grid else [0] * 7
+    hour_totals = [sum(grid[d][h] for d in range(7)) for h in range(24)] if grid else [0] * 24
+    peak_day = int(np.argmax(day_totals)) if any(day_totals) else 0
+    peak_hour = int(np.argmax(hour_totals)) if any(hour_totals) else 0
+    total_txns = sum(day_totals)
+
+    return ActivityResponse(
+        address=address,
+        chain=chain,
+        cells=cells,
+        peak_hour=peak_hour,
+        peak_day=peak_day,
+        total_txns=total_txns,
+    )
 
 
 @router.get("/{address}/similar", response_model=SimilarWalletsResponse)
