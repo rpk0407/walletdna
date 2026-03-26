@@ -82,10 +82,10 @@ async def get_wallet_profile(
     """Return the full personality profile for a wallet address.
 
     Checks Redis cache first. On miss (or refresh=true), runs the full
-    LangGraph pipeline: IngestAgent -> FeatureAgent -> ClassifyAgent -> ScoreAgent.
+    LangGraph pipeline: IngestAgent → FeatureAgent → ClassifyAgent → ScoreAgent.
     Stores result in PostgreSQL and caches in Redis.
     """
-    # 1. Cache check (Redis -> PostgreSQL -> pipeline)
+    # 1. Cache check (Redis → PostgreSQL → pipeline)
     if not refresh:
         cached = await get_profile_cache(address, chain)
         if cached:
