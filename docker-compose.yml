@@ -51,6 +51,26 @@ services:
       - ./ml:/app/ml
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: walletdna-worker
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./api:/app/api
+      - ./agents:/app/agents
+      - ./ml:/app/ml
+      - ./scripts:/app/scripts
+    command: python scripts/worker.py --concurrency 4
+    restart: unless-stopped
+
   dashboard:
     build:
       context: ./dashboard
