@@ -27,7 +27,7 @@ export default async function WalletProfilePage({ params, searchParams }: Props)
     return (
       <main className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="text-4xl mb-4">\u274C</div>
+          <div className="text-4xl mb-4">❌</div>
           <h2 className="text-xl font-semibold">Profile not available</h2>
           <p className="text-gray-500 mt-2">This wallet may have insufficient transaction history.</p>
         </div>
