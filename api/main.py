@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import settings
+from api.middleware.auth import AuthMiddleware
 from api.middleware.logging import LoggingMiddleware
 from api.routers import archetypes, auth, batch, wallet
 
@@ -44,6 +45,9 @@ app.add_middleware(
 
 # Request/response logging
 app.add_middleware(LoggingMiddleware)
+
+# API key authentication (applied after logging so requests are always logged)
+app.add_middleware(AuthMiddleware)
 
 # Routers
 app.include_router(wallet.router, prefix="/v1")

@@ -10,7 +10,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from api.config import settings
-from api.models.user import APIKey
+from api.models.user import APIKey, User
 
 logger = structlog.get_logger()
 
@@ -45,20 +45,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         async with _session_factory() as session:
             stmt = (
-                select(APIKey)
+                select(APIKey, User.tier)
+                .join(User, User.id == APIKey.user_id)
                 .where(APIKey.key_hash == key_hash, APIKey.is_active == True)  # noqa: E712
             )
-            key_record = await session.scalar(stmt)
+            row = (await session.execute(stmt)).one_or_none()
 
-        if not key_record:
+        if not row:
             return JSONResponse(
                 status_code=401,
                 content={"error": {"code": "invalid_api_key", "message": "API key not found or revoked"}},
             )
 
+        key_record, user_tier = row
+
         # Attach identity to request state for downstream use
         request.state.api_key_id = str(key_record.id)
         request.state.user_id = str(key_record.user_id)
-        request.state.tier = "free"  # TODO: join User.tier once User table is populated
+        request.state.tier = user_tier or "free"
 
         return await call_next(request)
