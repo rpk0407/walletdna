@@ -62,7 +62,7 @@ async def _run_pipeline(address: str, chain: str) -> WalletProfileResponse:
     if error:
         if "insufficient_data" in str(error):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail={"error": {"code": "insufficient_data", "message": error}},
             )
         raise HTTPException(

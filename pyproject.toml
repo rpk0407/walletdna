@@ -2,7 +2,7 @@
 name = "walletdna"
 version = "0.1.0"
 description = "On-Chain Personality API — Myers-Briggs for Wallets"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     # API Framework
     "fastapi>=0.115.0",
@@ -46,6 +46,9 @@ dev = [
     "ruff>=0.6.0",
     "httpx",  # For TestClient
 ]
+
+[tool.setuptools.packages.find]
+include = ["api*", "agents*", "ml*"]
 
 [tool.ruff]
 line-length = 100

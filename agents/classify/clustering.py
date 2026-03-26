@@ -62,10 +62,12 @@ class ClusterClassifier:
 
         # Apply same log-transform as training
         vector = self._apply_log_transform(vector)
-        scaled = self._scaler.transform(vector)
 
         if self._model is None:
+            # No trained model — use rule-based fallback (skip scaler)
             return -1, self._rule_based_scores(features)
+
+        scaled = self._scaler.transform(vector)
 
         # Use approximate_predict for new data points
         try:
