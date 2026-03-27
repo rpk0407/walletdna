@@ -1,9 +1,17 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'WalletDNA — Myers-Briggs for Wallets',
-  description: 'On-chain personality profiling. Classify crypto wallet behavior into trading archetypes.',
+  description:
+    'On-chain personality profiling. Classify crypto wallet behavior into trading archetypes.',
   openGraph: {
     title: 'WalletDNA',
     description: 'Discover your on-chain personality',
@@ -13,8 +21,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-950 text-gray-100 min-h-screen font-mono antialiased">
+    <html lang="en" className={inter.variable}>
+      <body className="bg-black text-zinc-100 min-h-screen font-sans antialiased">
         {children}
       </body>
     </html>
