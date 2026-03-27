@@ -4,19 +4,24 @@ WalletDNA Intelligence MCP Server
 ==================================
 Free, no-API-key scraping of Twitter/X, Reddit, Farcaster, RSS, and Web3 forums.
 
-Techniques used:
-  - Twitter: twscrape guest tokens (no account, no paid API)
+Techniques used (2025 updated):
+  - Twitter/X: twikit with account login (free, no paid API — guest tokens dead as of Jan 2025)
+             Setup: pip install twikit, set TWITTER_USERNAME/TWITTER_EMAIL/TWITTER_PASSWORD env vars
+             Alternative: twscrape with account cookies pooling (also requires account login)
   - Reddit:  public JSON API (no auth, 60 req/min)
   - Farcaster: Warpcast public Hub API (free, no key)
-  - RSS: feedparser on crypto news feeds (100% free)
+  - RSS: built-in xml.etree.ElementTree parser (zero external dependencies)
   - Web: httpx + BeautifulSoup for forums (rotated UA headers)
   - Backup: Playwright browser automation for JS-heavy pages
+
+NOTE: Twitter scraping requires a real account (free tier, no paid Twitter API needed).
+      Nitter public instances are defunct (shut down early 2024).
 
 Run as MCP server:
   python3 scripts/intel/intel_mcp_server.py
 
 Or install as MCP in settings.json:
-  "intel": {
+  "walletdna-intel": {
     "command": "python3",
     "args": ["/home/user/walletdna/scripts/intel/intel_mcp_server.py"]
   }
@@ -137,73 +142,115 @@ async def reddit_hot(subreddit: str = "defi", limit: int = 10) -> list[dict]:
             return []
 
 
-# ── Twitter/X scraper (twscrape guest tokens — no account, no paid API) ───────
+# ── Twitter/X scraper (requires account login as of Jan 2025) ───────────────
 
 async def twitter_search(query: str, limit: int = 20, mode: str = "top") -> list[dict]:
     """
-    Search Twitter using twscrape with guest tokens.
-    No account needed. No API key. Uses Twitter's internal guest API.
+    Search Twitter using twikit (requires account login).
+
+    ⚠️ IMPORTANT: As of Jan 2025, guest token scraping is DEAD.
+    Twitter now binds guest tokens to browser fingerprints and permanently bans datacenter IPs.
+
+    Setup required:
+      pip install twikit
+      export TWITTER_USERNAME="your_username"
+      export TWITTER_EMAIL="your_email"
+      export TWITTER_PASSWORD="your_password"
+
+    For pooling multiple accounts, use twscrape instead:
+      pip install twscrape
+      # Then configure accounts in ~/.local/share/twscrape/accounts.json
 
     mode: "top" | "latest"
     """
     try:
-        from twscrape import API, gather
-        api = API()  # uses ~/.local/share/twscrape/accounts.db — no login needed for guest
+        from twikit import Client
+        import os
 
-        tweets = await gather(api.search(query, limit=limit))
+        client = Client(language='en-US')
+        username = os.getenv('TWITTER_USERNAME')
+        email = os.getenv('TWITTER_EMAIL')
+        password = os.getenv('TWITTER_PASSWORD')
+
+        if not all([username, email, password]):
+            _log("Twitter: missing TWITTER_USERNAME/TWITTER_EMAIL/TWITTER_PASSWORD env vars")
+            return []
+
+        await client.login(auth_info_1=username, auth_info_2=email, password=password)
+        tweets = await client.search(query, product='Latest' if mode == 'latest' else 'Top')
+
         results = []
         for t in tweets:
             results.append({
                 "source": "twitter",
                 "id": str(t.id),
-                "text": t.rawContent,
-                "author": t.user.username if t.user else "unknown",
-                "author_name": t.user.displayname if t.user else "",
-                "followers": t.user.followersCount if t.user else 0,
-                "likes": t.likeCount,
-                "retweets": t.retweetCount,
-                "replies": t.replyCount,
-                "created": t.date.isoformat() if t.date else "",
-                "url": f"https://twitter.com/{t.user.username if t.user else 'i'}/status/{t.id}",
-                "lang": t.lang,
+                "text": t.text,
+                "author": t.user.name if t.user else "unknown",
+                "author_handle": t.user.screen_name if t.user else "",
+                "followers": t.user.followers_count if t.user else 0,
+                "likes": t.favorite_count,
+                "retweets": t.retweet_count,
+                "replies": t.reply_count,
+                "created": t.created_at.isoformat() if t.created_at else "",
+                "url": f"https://twitter.com/{t.user.screen_name if t.user else 'i'}/status/{t.id}",
+                "lang": t.lang if hasattr(t, 'lang') else "",
             })
         return results
+    except ImportError:
+        _log("twikit not installed: pip install twikit")
+        return []
     except Exception as e:
-        _log(f"twscrape error: {e} — trying Nitter RSS fallback")
-        return await nitter_search(query, limit)
+        _log(f"twikit search error: {e}")
+        return []
 
 
 async def twitter_user_tweets(username: str, limit: int = 20) -> list[dict]:
-    """Get recent tweets from a specific user. No API key."""
+    """Get recent tweets from a specific user. Requires account login (Jan 2025+)."""
     try:
-        from twscrape import API, gather
-        api = API()
-        users = await gather(api.search(f"from:{username}", limit=limit))
+        from twikit import Client
+        import os
+
+        client = Client(language='en-US')
+        auth_username = os.getenv('TWITTER_USERNAME')
+        email = os.getenv('TWITTER_EMAIL')
+        password = os.getenv('TWITTER_PASSWORD')
+
+        if not all([auth_username, email, password]):
+            _log("Twitter: missing TWITTER_USERNAME/TWITTER_EMAIL/TWITTER_PASSWORD env vars")
+            return []
+
+        await client.login(auth_info_1=auth_username, auth_info_2=email, password=password)
+
+        # Fetch user by handle
+        user = await client.get_user_by_screen_name(username)
+        tweets = await client.get_user_tweets(user.id, count=limit)
+
         results = []
-        for t in users:
+        for t in tweets:
             results.append({
                 "source": "twitter",
-                "text": t.rawContent,
+                "text": t.text,
                 "author": username,
-                "likes": t.likeCount,
-                "retweets": t.retweetCount,
-                "created": t.date.isoformat() if t.date else "",
+                "likes": t.favorite_count,
+                "retweets": t.retweet_count,
+                "created": t.created_at.isoformat() if t.created_at else "",
                 "url": f"https://twitter.com/{username}/status/{t.id}",
             })
         return results
+    except ImportError:
+        _log("twikit not installed: pip install twikit")
+        return []
     except Exception as e:
-        _log(f"twitter_user error: {e}")
-        return await nitter_user_rss(username, limit)
+        _log(f"twitter_user_tweets error: {e}")
+        return []
 
 
-# ── Nitter RSS fallback (works 100% without auth — open source Twitter frontend) ─
+# ── Nitter RSS fallback (DEPRECATED — all public instances shut down early 2024) ──
 
 _NITTER_INSTANCES = [
-    "nitter.poast.org",
-    "nitter.privacydev.net",
-    "nitter.1d4.us",
-    "nitter.kavin.rocks",
-    "lightbrd.com",
+    # All Nitter public instances are defunct as of early 2024
+    # X revoked guest account access that Nitter relied on
+    # Keeping for reference only — will not work
 ]
 
 
@@ -243,55 +290,18 @@ def _parse_rss_xml(xml_text: str, limit: int = 20) -> list[dict]:
 
 
 async def nitter_search(query: str, limit: int = 20) -> list[dict]:
-    """Use Nitter RSS for Twitter search — no account, no API."""
-    for instance in _NITTER_INSTANCES:
-        try:
-            rss_url = f"https://{instance}/search/rss?q={query.replace(' ', '+')}&f=tweets"
-            async with httpx.AsyncClient(headers=_headers(), timeout=10) as client:
-                r = await client.get(rss_url)
-                if r.status_code != 200:
-                    continue
-            items = _parse_rss_xml(r.text, limit)
-            results = [
-                {
-                    "source": "twitter_nitter",
-                    "title": it["title"],
-                    "text": it["text"],
-                    "author": it["author"],
-                    "url": it["url"],
-                    "created": it["created"],
-                }
-                for it in items
-            ]
-            _log(f"Nitter {instance}: {len(results)} results")
-            return results
-        except Exception as e:
-            _log(f"Nitter {instance} failed: {e}")
+    """DEPRECATED: Nitter RSS fallback — all public instances shut down early 2024.
+    Use twitter_search() with twikit account login instead.
+    """
+    _log("nitter_search: DEPRECATED — use twitter_search with twikit account login")
     return []
 
 
 async def nitter_user_rss(username: str, limit: int = 20) -> list[dict]:
-    """Get user tweets via Nitter RSS."""
-    for instance in _NITTER_INSTANCES:
-        try:
-            rss_url = f"https://{instance}/{username}/rss"
-            async with httpx.AsyncClient(headers=_headers(), timeout=10) as client:
-                r = await client.get(rss_url)
-                if r.status_code != 200:
-                    continue
-            items = _parse_rss_xml(r.text, limit)
-            return [
-                {
-                    "source": "twitter_nitter",
-                    "text": it["text"] or it["title"],
-                    "author": username,
-                    "url": it["url"],
-                    "created": it["created"],
-                }
-                for it in items
-            ]
-        except Exception as e:
-            _log(f"Nitter RSS {instance}/{username} failed: {e}")
+    """DEPRECATED: Nitter RSS fallback — all public instances shut down early 2024.
+    Use twitter_user_tweets() with twikit account login instead.
+    """
+    _log("nitter_user_rss: DEPRECATED — use twitter_user_tweets with twikit account login")
     return []
 
 
