@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/Users/rayan/AppData/Local/Programs/Antigravity/bin/antigravity --version)",
+      "Bash(/c/Users/rayan/AppData/Local/Programs/Antigravity/bin/antigravity --list-extensions)",
+      "Bash(/c/Users/rayan/AppData/Local/Programs/Antigravity/bin/antigravity --install-extension anthropic.claude-code 2>&1)",
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(uv --version)",
+      "Bash(docker --version)",
+      "Bash(docker-compose --version)",
+      "Bash(psql --version)"
+    ]
+  }
+}

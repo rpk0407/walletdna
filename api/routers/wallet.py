@@ -197,7 +197,7 @@ async def get_wallet_activity(
     db: DBSession,
     chain: Annotated[str, Query()] = "solana",
 ) -> ActivityResponse:
-    """Return 7x24 transaction activity heatmap (weekday x UTC hour).
+    """Return 7×24 transaction activity heatmap (weekday × UTC hour).
 
     Reads the precomputed activity_grid stored inside WalletProfile.features
     JSONB at the _activity_grid key. Returns normalized intensity per cell

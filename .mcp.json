@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/rayan/.antigravity/walletdna"],
+      "description": "Read/write files across the WalletDNA project — shared by all agents"
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fetch"],
+      "description": "HTTP requests — test Helius, Alchemy, and other blockchain APIs directly"
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub — manage PRs, issues, branches for WalletDNA repo"
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://walletdna:walletdna@localhost:5432/walletdna"],
+      "description": "Direct PostgreSQL access — query wallet profiles, users, API keys (requires Docker running)"
+    },
+    "redis": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-redis"],
+      "env": {
+        "REDIS_HOST": "localhost",
+        "REDIS_PORT": "6379"
+      },
+      "description": "Redis — inspect cache, rate limit counters, queue state (requires Docker running)"
+    }
+  }
+}
