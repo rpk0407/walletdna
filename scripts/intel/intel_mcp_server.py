@@ -169,11 +169,9 @@ async def reddit_hot(subreddit: str = "defi", limit: int = 10) -> list[dict]:
 # Twitter/X scraper (twscrape guest tokens — no account, no paid API)
 
 _NITTER_INSTANCES = [
+    "nitter.net",
     "nitter.poast.org",
     "nitter.privacydev.net",
-    "nitter.1d4.us",
-    "nitter.kavin.rocks",
-    "lightbrd.com",
 ]
 
 
@@ -231,10 +229,14 @@ async def nitter_user_rss(username: str, limit: int = 20) -> list[dict]:
 
 async def twitter_search(query: str, limit: int = 20, mode: str = "top") -> list[dict]:
     """
-    Search Twitter using twscrape with guest tokens.
-    No account needed. No API key. Uses Twitter's internal guest API.
-    Falls back to Nitter RSS if twscrape fails.
+    Search Twitter via Nitter RSS (primary — no account, no API key).
+    Falls back to twscrape if Nitter fails and accounts are configured.
+    Note: twscrape requires logged-in accounts added via `twscrape add_accounts` since Jan 2025.
     """
+    results = await nitter_search(query, limit)
+    if results:
+        return results
+    _log("Nitter failed — trying twscrape (requires accounts configured)")
     try:
         from twscrape import API, gather
         api = API()
@@ -257,8 +259,8 @@ async def twitter_search(query: str, limit: int = 20, mode: str = "top") -> list
             })
         return results
     except Exception as e:
-        _log(f"twscrape error: {e} — trying Nitter RSS fallback")
-        return await nitter_search(query, limit)
+        _log(f"twscrape error: {e}")
+        return []
 
 
 async def twitter_user_tweets(username: str, limit: int = 20) -> list[dict]:
@@ -344,7 +346,7 @@ _RSS_FEEDS = {
     "decrypt": "https://decrypt.co/feed",
     "coindesk": "https://coindesk.com/arc/outboundfeeds/rss/?outputType=xml",
     "cointelegraph": "https://cointelegraph.com/rss",
-    "messari": "https://messari.io/rss/news.xml",
+    # "messari": "https://messari.io/rss/news.xml",  # 429 rate-limited
     "reddit_defi": "https://www.reddit.com/r/defi/.rss",
     "reddit_crypto": "https://www.reddit.com/r/CryptoCurrency/.rss",
     "reddit_solana": "https://www.reddit.com/r/solana/.rss",
@@ -569,17 +571,18 @@ async def handle_request(req: dict) -> dict | None:
 
 
 async def main() -> None:
+    """
+    MCP stdio server loop — cross-platform (Windows ProactorEventLoop compatible).
+    connect_read_pipe crashes on Windows IOCP; run_in_executor works on all platforms.
+    """
     _log("WalletDNA Intel MCP server starting...")
     loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     while True:
         try:
-            line = await reader.readline()
+            line = await loop.run_in_executor(None, sys.stdin.readline)
             if not line:
                 break
-            line = line.decode().strip()
+            line = line.strip()
             if not line:
                 continue
             req = json.loads(line)

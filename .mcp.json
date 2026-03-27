@@ -36,6 +36,12 @@
         "REDIS_PORT": "6379"
       },
       "description": "Redis — inspect cache, rate limit counters, queue state (requires Docker running)"
+    },
+    "intel": {
+      "type": "stdio",
+      "command": "C:/Users/rayan/tools/python312/python.exe",
+      "args": ["C:/Users/rayan/.antigravity/walletdna/scripts/intel/intel_mcp_server.py"],
+      "description": "Free intelligence scraping — Twitter (Nitter RSS), Reddit, Farcaster, RSS feeds. No API keys."
     }
   }
 }
