@@ -42,6 +42,33 @@
       "command": "C:/Users/rayan/tools/python312/python.exe",
       "args": ["C:/Users/rayan/.antigravity/walletdna/scripts/intel/intel_mcp_server.py"],
       "description": "Free intelligence scraping — Twitter (Nitter RSS), Reddit, Farcaster, RSS feeds. No API keys."
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Knowledge graph persistent memory — entities, relations, cross-session learning. No API key needed."
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Structured step-by-step reasoning — use for architecture decisions, algorithm design, complex debugging."
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "description": "Real browser automation — scrape JS-heavy sites, blockchain explorers, wallet dashboards. No screenshots needed."
+    },
+    "exa": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "${EXA_API_KEY}"
+      },
+      "description": "Exa neural web search — best for technical/crypto research queries. Requires EXA_API_KEY."
     }
   }
 }
